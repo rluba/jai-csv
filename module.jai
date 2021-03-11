@@ -119,7 +119,7 @@ csv_consume_col :: (line: string, delimiter: u8) -> col: string, success: bool, 
 #scope_file
 
 report_error :: (format: string, args: .. Any) {
-    logprint("csv", format, .. args);
+    log_error(format, .. args);
 }
 
 #import "Basic";
