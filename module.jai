@@ -6,20 +6,15 @@ csv_parse :: (csv_data: string, $T: Type, get_member_data: $U, get_member: (stri
 	remaining_data := csv_data;
 	results: [..] T;
 
-	line, success := consume_next_line(*remaining_data);
-	if !success {
-		report_error("No header line found");
-		return results, false;
-	}
-
 	info := type_info(T);
 	column_members: [..] *Type_Info_Struct_Member;
 	defer array_free(column_members);
 
 	last := false;
+	success: bool;
 	while !last {
-		name: string;
-		name, success, last, line = csv_consume_col(line, delimiter);
+		name: string = ---;
+		name, success, last = csv_consume_col(*remaining_data, delimiter);
 		if !success {
 			report_error("Could not read column % of first line", column_members.count + 1);
 			return results, false;
@@ -42,19 +37,16 @@ csv_parse :: (csv_data: string, $T: Type, get_member_data: $U, get_member: (stri
 	}
 
 	while true {
-		line, success := consume_next_line(*remaining_data);
-		if !success {
-			break;
-		}
+		if !remaining_data	break;
+
 		result: T;
-		full_line := line;
+		line_start := remaining_data;
 
 		for column_members {
-			val: string;
 			// @Speed: Skip col if we’re not interested (instead of potentially un-quoting)
-			val, success, last, line = csv_consume_col(line, delimiter);
+			val, success, last := csv_consume_col(*remaining_data, delimiter);
 			if !success || (last && it_index != column_members.count - 1) {
-				report_error("Could not read column % of line %:\n%", it_index + 1, results.count + 2, full_line);
+				report_error("Could not read column % of line %:\n%", it_index + 1, results.count + 2, line_start);
 				return results, false;
 			}
 			if it {
@@ -68,35 +60,42 @@ csv_parse :: (csv_data: string, $T: Type, get_member_data: $U, get_member: (stri
 	return results, true;
 }
 
-csv_consume_col :: (line: string, delimiter: u8) -> col: string, success: bool, last: bool, remainder: string {
-	if !line.count	return "", true, true, line;
-
+csv_consume_col :: (remaining_data: *string, delimiter: u8) -> col: string, success: bool, last: bool {
+	if !remaining_data.count	return "", true, true;
+	
 	num_quotes := 0;
 	delim_pos := -1;
-	for index: 0..line.count-1 {
-		if line[index] == #char "\"" {
+	last := false;
+	for index: 0..remaining_data.count-1 {
+		c := (<<remaining_data)[index];
+		if c == #char "\"" {
 			num_quotes += 1;
-		} else if line[index] == delimiter && num_quotes % 2 == 0 {
-			delim_pos = index;
-			break;
+		} else if num_quotes % 2 == 0 {
+			if c == delimiter {
+				delim_pos = index;
+				break;
+			} else if c == #char "\n" {
+				delim_pos = index;
+				last = true;
+				break;
+			}
 		}
 	}
 	col, remainder: string;
-	last := false;
 	if delim_pos == -1 {
-		col = line;
-		remainder = "";
+		col = <<remaining_data;
+		remaining_data.count = 0;
 		last = true;
 	} else {
-		col = slice(line, 0, delim_pos);
-		remainder = advance(line, delim_pos + 1);
+		col = slice(<<remaining_data, 0, delim_pos);
+		advance(remaining_data, delim_pos + 1);
 	}
 
-	if num_quotes == 0		return col, true, last, remainder;
+	if num_quotes == 0		return col, true, last;
 
 	if num_quotes % 2 != 0 || col[0] != #char "\"" || col[col.count - 1] != #char "\"" {
-		report_error("Invalid number of quotes: % in %", num_quotes);
-		return "", false, last, line;
+		report_error("Invalid number of quotes: % in %", num_quotes, col);
+		return "", false, last;
 	}
 	expected_len := col.count - num_quotes / 2;
 	result := talloc_string(expected_len);
@@ -108,12 +107,12 @@ csv_consume_col :: (line: string, delimiter: u8) -> col: string, success: bool, 
 			if col[index + 1] != #char "\"" {
 				report_error("Invalid quote sequence at % in %", index, col);
 				free(result);
-				return "", false, last, remainder;
+				return "", false, last;
 			}
 			index += 1;
 		}
 	}
-	return result, true, last, remainder;
+	return result, true, last;
 }
 
 #scope_file
