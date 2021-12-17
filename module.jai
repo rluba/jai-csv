@@ -115,6 +115,38 @@ csv_consume_col :: (remaining_data: *string, delimiter: u8) -> col: string, succ
 	return result, true, last;
 }
 
+// Escape a value so that it can be safely written into a CSV column. Might temporary allocate
+csv_escape :: (value: string, delimiter : u8 = #char ",") -> string {
+	needs_quotes := false;
+	num_quotes := 0;
+	for i: 0..value.count-1 {
+		if value[i] == #char "\"" {
+			num_quotes += 1;
+			needs_quotes = true;
+		} else if value[i] == #char "\n" || value[i] == delimiter {
+			needs_quotes = true;
+		}
+	}
+
+	if !needs_quotes	return value;
+
+	result := talloc_string(value.count + num_quotes + 2);
+	result.data[0] = #char "\"";
+	result.count = 1;
+	for i: 0..value.count-1 {
+		result.data[result.count] = value[i];
+		result.count += 1;
+		if value[i] == #char "\"" {
+			result.data[result.count] = #char "\"";
+			result.count += 1;
+		}
+	}
+	result.data[result.count] = #char "\"";
+	result.count += 1;
+
+	return result;
+}
+
 #scope_file
 
 report_error :: (format: string, args: .. Any) {
