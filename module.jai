@@ -45,7 +45,8 @@ csv_parse :: (csv_data: string, $T: Type, get_member_data: $U, get_member: (stri
 		for column_members {
 			// @Speed: Skip col if we’re not interested (instead of potentially un-quoting)
 			val, success, last := csv_consume_col(*remaining_data, delimiter);
-			if !success || (last && it_index != column_members.count - 1) {
+			should_be_last := (it_index == column_members.count - 1);
+			if !success || last != should_be_last {
 				report_error("Could not read column % of line %:\n%", it_index + 1, results.count + 2, line_start);
 				return results, false;
 			}
