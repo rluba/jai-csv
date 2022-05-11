@@ -16,7 +16,7 @@ csv_parse :: (csv_data: string, $T: Type, get_member_data: $U, get_member: (stri
 		name: string = ---;
 		name, success, last = csv_consume_col(*remaining_data, delimiter);
 		if !success {
-			report_error("Could not read column % of first line", column_members.count + 1);
+			log_error("Could not read column % of first line", column_members.count + 1);
 			return results, false;
 		}
 		member_name := get_member(name, column_members.count, get_member_data);
@@ -24,12 +24,12 @@ csv_parse :: (csv_data: string, $T: Type, get_member_data: $U, get_member: (stri
 		if member_name {
 			member = get_field(info, member_name);
 			if !member {
-				report_error("Type % does not contain a member named \"%\"", T, member_name);
+				log_error("Type % does not contain a member named \"%\"", T, member_name);
 				return results, false;
 			}
 			// @ToDo: Support int, float, …
 			if member.type.type != Type_Info_Tag.STRING {
-				report_error("Member \"%\" has unsupported type %", member_name, member.type);
+				log_error("Member \"%\" has unsupported type %", member_name, member.type);
 				return results, false;
 			}
 		}
@@ -47,7 +47,7 @@ csv_parse :: (csv_data: string, $T: Type, get_member_data: $U, get_member: (stri
 			val, success, last := csv_consume_col(*remaining_data, delimiter);
 			should_be_last := (it_index == column_members.count - 1);
 			if !success || last != should_be_last {
-				report_error("Could not read column % of line %:\n%", it_index + 1, results.count + 2, line_start);
+				log_error("Could not read column % of line %:\n%", it_index + 1, results.count + 2, line_start);
 				return results, false;
 			}
 			if it {
@@ -63,7 +63,7 @@ csv_parse :: (csv_data: string, $T: Type, get_member_data: $U, get_member: (stri
 
 csv_consume_col :: (remaining_data: *string, delimiter: u8) -> col: string, success: bool, last: bool {
 	if !remaining_data.count	return "", true, true;
-	
+
 	num_quotes := 0;
 	delim_pos := -1;
 	last := false;
@@ -95,7 +95,7 @@ csv_consume_col :: (remaining_data: *string, delimiter: u8) -> col: string, succ
 	if num_quotes == 0		return col, true, last;
 
 	if num_quotes % 2 != 0 || col[0] != #char "\"" || col[col.count - 1] != #char "\"" {
-		report_error("Invalid number of quotes: % in %", num_quotes, col);
+		log_error("Invalid number of quotes: % in %", num_quotes, col);
 		return "", false, last;
 	}
 	expected_len := col.count - num_quotes / 2;
@@ -106,7 +106,7 @@ csv_consume_col :: (remaining_data: *string, delimiter: u8) -> col: string, succ
 		result.count += 1;
 		if col[index] == #char "\""  {
 			if col[index + 1] != #char "\"" {
-				report_error("Invalid quote sequence at % in %", index, col);
+				log_error("Invalid quote sequence at % in %", index, col);
 				free(result);
 				return "", false, last;
 			}
@@ -149,10 +149,6 @@ csv_escape :: (value: string, delimiter : u8 = #char ",") -> string {
 }
 
 #scope_file
-
-report_error :: (format: string, args: .. Any) {
-    log_error(format, .. args);
-}
 
 #import "Basic";
 #import "String";
