@@ -2,7 +2,7 @@
 // The get_member function is called once for each column.
 // It gets passed column title, index and get_member_data and should return the name of the member of T that the column should be parsed into.
 // @ToDo: Use macro instead of get_member function?
-csv_parse :: (csv_data: string, $T: Type, get_member_data: $U, get_member: (string, int, U) -> string, delimiter : u8 = #char ",") -> [..] T, success: bool {
+csv_parse :: (csv_data: string, $T: Type, get_member_data: $U, get_member: (string, int, U) -> string, delimiter : u8 = #char ",", parse_integer := parse_integer_column, parse_float := parse_float_column) -> [..] T, success: bool {
 	remaining_data := csv_data;
 	results: [..] T;
 
@@ -27,8 +27,8 @@ csv_parse :: (csv_data: string, $T: Type, get_member_data: $U, get_member: (stri
 				log_error("Type % does not contain a member named \"%\"", T, member_name);
 				return results, false;
 			}
-			// @ToDo: Support int, float, …
-			if member.type.type != Type_Info_Tag.STRING {
+			tag := member.type.type;
+			if tag != .STRING && tag != .INTEGER && tag != .FLOAT {
 				log_error("Member \"%\" has unsupported type %", member_name, member.type);
 				return results, false;
 			}
@@ -44,7 +44,7 @@ csv_parse :: (csv_data: string, $T: Type, get_member_data: $U, get_member: (stri
 
 		for column_members {
 			// @Speed: Skip col if we’re not interested (instead of potentially un-quoting)
-			val, success, last := csv_consume_col(*remaining_data, delimiter);
+			value, success, last := csv_consume_col(*remaining_data, delimiter);
 			should_be_last := (it_index == column_members.count - 1);
 			if !success || last != should_be_last {
 				log_error("Could not read column % of line %:\n%", it_index + 1, results.count + 2, line_start);
@@ -52,7 +52,36 @@ csv_parse :: (csv_data: string, $T: Type, get_member_data: $U, get_member: (stri
 			}
 			if it {
 				slot := (cast(*u8) *result) + it.offset_in_bytes;
-				<< (cast(*string) slot) = copy_string(val);
+				if it.type.type == {
+					case .STRING;
+						<< (cast(*string) slot) = copy_string(value);
+					case .FLOAT;
+						success, float_value := parse_float(it.name, value);
+						if !success {
+							log_error("Could not parse column % of line % as float:\n%", it_index + 1, results.count + 2, line_start);
+							return results, false;
+						}
+
+						if it.type.runtime_size == 4 {
+							(<< cast(*float) slot) = cast(float) float_value;
+						} else {
+							assert(it.type.runtime_size == 8);
+							(<< cast(*float64) slot) = float_value;
+						}
+					case .INTEGER;
+						success, int_value := parse_integer(it.name, value);
+						if !success {
+							log_error("Could not parse column % of line % as integer:\n%", it_index + 1, results.count + 2, line_start);
+							return results, false;
+						}
+
+						int_info := cast(*Type_Info_Integer) it.type;
+						success = write_integer(it.name, int_info, slot, int_value);
+						if !success	then return results, false;
+					case;
+						// Should have been caught above
+						assert(false);
+				}
 			}
 		}
 		array_add(*results, result);
@@ -148,7 +177,99 @@ csv_escape :: (value: string, delimiter : u8 = #char ",") -> string {
 	return result;
 }
 
+parse_integer_column :: (name: string, string_value: string) -> success: bool, value: s64 {
+	int_value, success, remainder := to_integer(string_value);
+	return success && !remainder, int_value;
+}
+
+parse_float_column :: (name: string, string_value: string) -> success: bool, value: float64 {
+	float_value, success, remainder := string_to_float64(string_value);
+	return success && !remainder, float_value;
+}
+
+
 #scope_file
+
+// Copied from modules/Command_Line.
+// @ToDo: This should probably be in modules/Reflection because all "parse into a type" parsers need it.
+write_integer :: (name: string, info: *Type_Info_Integer, pointer: *void, value: s64) -> bool {
+    if info.signed {
+        valid, low, high := range_check_and_store(value, info, pointer);
+
+        if !valid {
+            log_error("The value of argument '%' %, which is out of range. (The value must be between % and %.)", name, value, low, high);
+            return false;
+        }
+    } else {
+        valid, low, high := range_check_and_store(cast(u64) value, info, pointer);  // Different overload from the above!
+
+        if !valid {
+            log_error("The value of argument '%' is %, which is out of range. (The value must be between % and %.)", name, cast(u64) value, low, high);
+            return false;
+        }
+    }
+
+    return true;
+}
+
+range_check_and_store :: (value: $T, info: *Type_Info_Integer, pointer: *void) -> (success: bool, low: T, high: T) {
+    #assert((T == u64) || (T == s64));
+
+    size := info.runtime_size;
+
+    #if T == u64 {
+        low, high := unsigned_integer_range_from_size(size);
+        if (value < low) || (value > high)  return false, low, high;
+
+        store(pointer, value, size);
+        return true, low, high;
+    } else {
+        low, high := signed_integer_range_from_size(size);
+        if (value < low) || (value > high)  return false, low, high;
+
+        store(pointer, value, size);
+        return true, low, high;
+    }
+
+    store :: (pointer: *void, value: T, size: int) {
+        if size == {
+            case 1;
+                << cast(*s8)  pointer = xx,no_check value;
+            case 2;
+                << cast(*s16) pointer = xx,no_check value;
+            case 4;
+                << cast(*s32) pointer = xx,no_check value;
+            case 8;
+                << cast(*s64) pointer = xx,no_check value;
+            case;
+            assert(false);
+        }
+    }
+
+}
+
+signed_integer_range_from_size :: (size_in_bytes: int) -> (low: s64, high: s64) {
+    assert((size_in_bytes == 1) || (size_in_bytes == 2) || (size_in_bytes == 4) || (size_in_bytes == 8));
+
+    high := (1 << (size_in_bytes*8-1)) - 1;
+    low  := ~high;
+
+    return low, high;
+}
+
+unsigned_integer_range_from_size :: (size_in_bytes: int) -> (low: u64, high: u64) {
+    assert((size_in_bytes == 1) || (size_in_bytes == 2) || (size_in_bytes == 4) || (size_in_bytes == 8));
+
+    high: u64 = ---;
+    if size_in_bytes == 8 {
+        high = cast(u64) 0xffff_ffff_ffff_ffff;  // Hardcode 8 to prevent unpredictable behavior due to platform-specific details. In the future the outcome of << will be language-defined in all cases.
+    } else {
+        high = cast(u64) (1 << (size_in_bytes*8)) - 1;  // @CompilerBug: Why do we need to cast the 1? That is dumb.
+    }
+
+    return 0, high;
+}
+
 
 #import "Basic";
 #import "String";
