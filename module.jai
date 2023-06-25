@@ -215,22 +215,6 @@ write_integer :: (name: string, info: *Type_Info_Integer, pointer: *void, value:
 range_check_and_store :: (value: $T, info: *Type_Info_Integer, pointer: *void) -> (success: bool, low: T, high: T) {
     #assert((T == u64) || (T == s64));
 
-    size := info.runtime_size;
-
-    #if T == u64 {
-        low, high := unsigned_integer_range_from_size(size);
-        if (value < low) || (value > high)  return false, low, high;
-
-        store(pointer, value, size);
-        return true, low, high;
-    } else {
-        low, high := signed_integer_range_from_size(size);
-        if (value < low) || (value > high)  return false, low, high;
-
-        store(pointer, value, size);
-        return true, low, high;
-    }
-
     store :: (pointer: *void, value: T, size: int) {
         if size == {
             case 1;
@@ -246,6 +230,21 @@ range_check_and_store :: (value: $T, info: *Type_Info_Integer, pointer: *void) -
         }
     }
 
+    size := info.runtime_size;
+
+    #if T == u64 {
+        low, high := unsigned_integer_range_from_size(size);
+        if (value < low) || (value > high)  return false, low, high;
+
+        store(pointer, value, size);
+        return true, low, high;
+    } else {
+        low, high := signed_integer_range_from_size(size);
+        if (value < low) || (value > high)  return false, low, high;
+
+        store(pointer, value, size);
+        return true, low, high;
+    }
 }
 
 signed_integer_range_from_size :: (size_in_bytes: int) -> (low: s64, high: s64) {
