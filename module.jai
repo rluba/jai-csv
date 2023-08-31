@@ -177,6 +177,34 @@ csv_escape :: (value: string, delimiter : u8 = #char ",") -> string {
 	return result;
 }
 
+append_csv_escaped :: (builder: *String_Builder, value: string, delimiter : u8 = #char ",") {
+	needs_quotes := false;
+	num_quotes := 0;
+	for i: 0..value.count-1 {
+		if value[i] == #char "\"" {
+			num_quotes += 1;
+			needs_quotes = true;
+		} else if value[i] == #char "\n" || value[i] == delimiter {
+			needs_quotes = true;
+		}
+	}
+
+	if !needs_quotes {
+        append(builder, value);
+        return;
+    }
+
+    append(builder, #char "\"");
+	for i: 0..value.count-1 {
+		if value[i] == #char "\"" {
+            append(builder, "\"\"");
+		} else {
+            append(builder, value[i]);
+        }
+	}
+    append(builder, #char "\"");
+}
+
 parse_integer_column :: (name: string, string_value: string) -> success: bool, value: s64 {
 	int_value, success, remainder := to_integer(string_value);
 	return success && !remainder, int_value;
