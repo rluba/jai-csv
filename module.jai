@@ -54,7 +54,7 @@ csv_parse :: (csv_data: string, $T: Type, get_member_data: $U, get_member: (stri
 				slot := (cast(*u8) *result) + it.offset_in_bytes;
 				if it.type.type == {
 					case .STRING;
-						<< (cast(*string) slot) = copy_string(value);
+						(cast(*string) slot).* = copy_string(value);
 					case .FLOAT;
 						success, float_value := parse_float(it.name, value);
 						if !success {
@@ -63,10 +63,10 @@ csv_parse :: (csv_data: string, $T: Type, get_member_data: $U, get_member: (stri
 						}
 
 						if it.type.runtime_size == 4 {
-							(<< cast(*float) slot) = cast(float) float_value;
+							(cast(*float) slot).* = cast(float) float_value;
 						} else {
 							assert(it.type.runtime_size == 8);
-							(<< cast(*float64) slot) = float_value;
+							(cast(*float64) slot).* = float_value;
 						}
 					case .INTEGER;
 						success, int_value := parse_integer(it.name, value);
@@ -246,13 +246,13 @@ range_check_and_store :: (value: $T, info: *Type_Info_Integer, pointer: *void) -
     store :: (pointer: *void, value: T, size: int) {
         if size == {
             case 1;
-                << cast(*s8)  pointer = xx,no_check value;
+                (cast(*s8)  pointer).* = xx,no_check value;
             case 2;
-                << cast(*s16) pointer = xx,no_check value;
+                (cast(*s16) pointer).* = xx,no_check value;
             case 4;
-                << cast(*s32) pointer = xx,no_check value;
+                (cast(*s32) pointer).* = xx,no_check value;
             case 8;
-                << cast(*s64) pointer = xx,no_check value;
+                (cast(*s64) pointer).* = xx,no_check value;
             case;
             assert(false);
         }
