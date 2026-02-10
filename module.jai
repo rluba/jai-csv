@@ -97,7 +97,7 @@ csv_consume_col :: (remaining_data: *string, delimiter: u8) -> col: string, succ
 	delim_pos := -1;
 	last := false;
 	for index: 0..remaining_data.count-1 {
-		c := (<<remaining_data)[index];
+		c := (remaining_data.*)[index];
 		if c == #char "\"" {
 			num_quotes += 1;
 		} else if num_quotes % 2 == 0 {
@@ -113,11 +113,11 @@ csv_consume_col :: (remaining_data: *string, delimiter: u8) -> col: string, succ
 	}
 	col, remainder: string;
 	if delim_pos == -1 {
-		col = <<remaining_data;
+		col = remaining_data.*;
 		remaining_data.count = 0;
 		last = true;
 	} else {
-		col = slice(<<remaining_data, 0, delim_pos);
+		col = slice(remaining_data.*, 0, delim_pos);
 		advance(remaining_data, delim_pos + 1);
 	}
 
